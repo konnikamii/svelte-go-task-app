@@ -7,7 +7,7 @@ import (
 	"github.com/avukadin/goapi/api"
 	"github.com/gorilla/schema"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/tools"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func GetCoinBalance(w http.ResponseWriter, r *http.Request) {
@@ -18,13 +18,13 @@ func GetCoinBalance(w http.ResponseWriter, r *http.Request) {
 	err = decoder.Decode(&params, r.URL.Query())
 
 	if err != nil {
-		log.Error(err)
+		logrus.Error(err)
 		api.InternalErrorHandler(w)
 		return
 	}
 
 	var database *tools.DatabaseInterface
-	database, err =  tools.NewDatabase()
+	database, err = tools.NewDatabase()
 	if err != nil {
 		api.InternalErrorHandler(w)
 		return
@@ -33,20 +33,20 @@ func GetCoinBalance(w http.ResponseWriter, r *http.Request) {
 	var tokenDetails *tools.CoinDetails
 	tokenDetails = (*database).GetUserCoins(params.Username)
 	if tokenDetails == nil {
-		log.Error(err)
+		logrus.Error(err)
 		api.InternalErrorHandler(w)
 		return
 	}
 
 	var response = api.CoinBalanceResponse{
 		Balance: (*tokenDetails).Coins,
-		Code: http.StatusOK,
+		Code:    http.StatusOK,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		log.Error(err)
+		logrus.Error(err)
 		api.InternalErrorHandler(w)
 		return
 	}

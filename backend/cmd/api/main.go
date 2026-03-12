@@ -1,25 +1,48 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
+	"context"
+	"os"
 
-	"github.com/go-chi/chi"
-	"github.com/konnikamii/svelte-go-task-app/backend/internal/handlers"
-	log "github.com/sirupsen/logrus"
+	"github.com/jackc/pgx/v5"
+	"github.com/joho/godotenv"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/env"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-
-	log.SetReportCaller(true)
-	var router *chi.Mux = chi.NewRouter()
-	handlers.Handler(router)
-
-	fmt.Println("Starting server....")
-
-	err := http.ListenAndServe("localhost:8000", router)
-	if err != nil {
-		log.Error(err)
+	// Config
+	if err := godotenv.Load(); err != nil {
+		logrus.Fatal("Error loading .env file")
 	}
 
+	// Logger
+	// logrus.SetReportCaller(true)
+	logrus.SetFormatter(&logrus.TextFormatter{ForceColors: true})
+
+	ctx := context.Background()
+	cfg := config{
+		addr: env.GetString("SERVER_HOST", "") + ":" + env.GetString("SERVER_PORT", ""),
+		db: dbConfig{
+			dsn: env.GetString("GOOSE_DBSTRING", ""),
+		},
+	}
+
+	// Database
+	conn, err := pgx.Connect(ctx, cfg.db.dsn)
+	if err != nil {
+		logrus.Error("Error connecting to database!")
+		panic(err)
+	}
+	defer conn.Close(ctx)
+
+	// Start
+	app := application{
+		config: cfg,
+		db:     conn,
+	}
+	if err := app.run(app.mount()); err != nil {
+		logrus.Error("server failed to start", "error", err)
+		os.Exit(1)
+	}
 }

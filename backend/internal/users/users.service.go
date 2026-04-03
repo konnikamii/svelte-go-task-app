@@ -2,109 +2,326 @@ package users
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 
+	"github.com/jackc/pgx/v5"
+	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/apperrors"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/authorization"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/middleware"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
-	repo Repository
+	repo repo.Queries
+	db   *pgx.Conn
 }
 
 // NewService creates a new user service
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo repo.Queries, db *pgx.Conn) *Service {
+	return &Service{repo: repo, db: db}
 }
 
-// GetUsers retrieves all users
-func (s *Service) GetUsers(ctx context.Context) ([]User, error) {
-	users, err := s.repo.GetUsers(ctx)
+// Retrieves users with filtering, sorting and pagination.
+func (s *Service) GetUsersPaginated(ctx context.Context, arg PaginatedRequest) (PaginatedResponce, error) {
+	actorID := middleware.UserIDFromContext(ctx)
+	scopeSet, err := s.scopeSet(ctx, actorID, "user", "read")
 	if err != nil {
-		logrus.WithError(err).Error("failed to fetch users from repository")
-		return nil, ErrInternal
+		return PaginatedResponce{}, err
 	}
-	return users, nil
+	if !scopeSet.Any && !scopeSet.Own {
+		return PaginatedResponce{}, apperrors.Forbidden("insufficient permission")
+	}
+
+	if arg.Page <= 0 {
+		arg.Page = 1
+	}
+	if arg.PageSize <= 0 {
+		arg.PageSize = 10
+	}
+	offset := (arg.Page - 1) * arg.PageSize
+
+	var (
+		args  []any
+		where []string
+	)
+
+	if arg.Filters.Search != "" {
+		args = append(args, "%"+arg.Filters.Search+"%")
+		where = append(where,
+			fmt.Sprintf("(CAST(id AS TEXT) ILIKE $%d OR name ILIKE $%d OR email ILIKE $%d)", len(args), len(args), len(args)),
+		)
+	}
+
+	if !scopeSet.Any {
+		args = append(args, actorID)
+		where = append(where, fmt.Sprintf("id = $%d", len(args)))
+	}
+
+	baseQuery := `SELECT * FROM users`
+	if len(where) > 0 {
+		baseQuery += " WHERE " + strings.Join(where, " AND ")
+	}
+
+	sortBy := "created_at"
+	switch arg.SortBy {
+	case "id", "name", "email", "created_at":
+		sortBy = arg.SortBy
+	}
+
+	sortDir := "ASC"
+	if strings.ToLower(arg.SortType) == "desc" {
+		sortDir = "DESC"
+	}
+
+	baseQuery += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortDir)
+
+	args = append(args, arg.PageSize)
+	limitPos := len(args)
+
+	args = append(args, offset)
+	offsetPos := len(args)
+
+	baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", limitPos, offsetPos)
+
+	rows, err := s.db.Query(ctx, baseQuery, args...)
+	if err != nil {
+		logrus.WithError(err).Error("failed to query users")
+		return PaginatedResponce{}, err
+	}
+	defer rows.Close()
+
+	users := make([]UserResponse, 0)
+	for rows.Next() {
+		var user repo.User
+		if err := rows.Scan(
+			&user.ID,
+			&user.Name,
+			&user.Email,
+			&user.Password,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		); err != nil {
+			logrus.WithError(err).Error("failed to scan user row")
+			return PaginatedResponce{}, err
+		}
+		users = append(users, userToResponse(user))
+	}
+
+	if err := rows.Err(); err != nil {
+		logrus.WithError(err).Error("failed while iterating user rows")
+		return PaginatedResponce{}, err
+	}
+
+	countQuery := "SELECT COUNT(*) FROM users"
+	if len(where) > 0 {
+		countQuery += " WHERE " + strings.Join(where, " AND ")
+	}
+
+	var count int64
+	err = s.db.QueryRow(ctx, countQuery, args[:len(args)-2]...).Scan(&count)
+	if err != nil {
+		logrus.WithError(err).Error("failed to count users")
+		return PaginatedResponce{}, err
+	}
+
+	return PaginatedResponce{
+		TotalEntries: count,
+		Entries:      users,
+	}, nil
 }
 
-// GetUserByID retrieves a single user by ID
-func (s *Service) GetUserByID(ctx context.Context, id int) (*User, error) {
+// Retrieves a single user by ID
+func (s *Service) GetUserByID(ctx context.Context, id int32) (UserResponse, error) {
+	actorID := middleware.UserIDFromContext(ctx)
+	allowed, err := s.canAccess(ctx, actorID, id, "user", "read")
+	if err != nil {
+		return UserResponse{}, err
+	}
+	if !allowed {
+		return UserResponse{}, apperrors.Forbidden("insufficient permission")
+	}
+
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
-		logrus.WithError(err).WithField("id", id).Error("failed to fetch user from repository")
-		return nil, ErrUserNotFound
+		return UserResponse{}, err
 	}
-	return user, nil
+	return userToResponse(user), nil
 }
 
-// GetUserByEmail retrieves a user by email
-func (s *Service) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+// Retrieves a user by email
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (UserResponse, error) {
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
-		logrus.WithError(err).WithField("email", email).Error("failed to fetch user from repository")
-		return nil, ErrUserNotFound
+		return UserResponse{}, err
 	}
-	return user, nil
+	return userToResponse(user), nil
 }
 
-// CreateUser creates a new user
-func (s *Service) CreateUser(ctx context.Context, user *User) (*User, error) {
-	if err := validateUser(user); err != nil {
-		logrus.WithError(err).Warn("invalid user data")
-		return nil, ErrInvalidInput
+// Creates a new user
+func (s *Service) CreateUser(ctx context.Context, user *repo.CreateUserParams) (UserResponse, error) {
+	_, err := s.repo.GetUserByEmail(ctx, user.Email)
+	if err == nil {
+		return UserResponse{}, apperrors.Conflict("email is already taken")
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return UserResponse{}, err
 	}
-
-	// Check if user already exists
-	existing, _ := s.repo.GetUserByEmail(ctx, user.Email)
-	if existing != nil {
-		logrus.WithField("email", user.Email).Warn("user already exists")
-		return nil, ErrUserExists
+	if err := ValidatePassword(user.Password); err != nil {
+		return UserResponse{}, err
 	}
-
-	created, err := s.repo.CreateUser(ctx, user)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		logrus.WithError(err).Error("failed to create user in repository")
-		return nil, ErrInternal
+		return UserResponse{}, err
 	}
-
-	logrus.WithField("user_id", created.ID).Info("user created successfully")
-	return created, nil
-}
-
-// UpdateUser updates an existing user
-func (s *Service) UpdateUser(ctx context.Context, id int, user *User) (*User, error) {
-	if err := validateUser(user); err != nil {
-		logrus.WithError(err).Warn("invalid user data")
-		return nil, ErrInvalidInput
-	}
-
-	updated, err := s.repo.UpdateUser(ctx, id, user)
+	defer tx.Rollback(ctx)
+	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), 12)
 	if err != nil {
-		logrus.WithError(err).WithField("id", id).Error("failed to update user in repository")
-		return nil, ErrInternal
+		return UserResponse{}, err
 	}
-
-	logrus.WithField("user_id", id).Info("user updated successfully")
-	return updated, nil
-}
-
-// DeleteUser deletes a user
-func (s *Service) DeleteUser(ctx context.Context, id int) error {
-	err := s.repo.DeleteUser(ctx, id)
+	qtx := s.repo.WithTx(tx)
+	created, err := qtx.CreateUser(ctx, repo.CreateUserParams{Name: user.Name, Email: user.Email, Password: string(hash)})
 	if err != nil {
-		logrus.WithError(err).WithField("id", id).Error("failed to delete user from repository")
-		return ErrInternal
+		return UserResponse{}, err
 	}
 
-	logrus.WithField("user_id", id).Info("user deleted successfully")
-	return nil
+	assigned, err := qtx.AssignRoleByNameToUser(ctx, repo.AssignRoleByNameToUserParams{
+		UserID: created.ID,
+		Name:   "user",
+	})
+	if err != nil {
+		return UserResponse{}, err
+	}
+	if assigned == 0 {
+		return UserResponse{}, apperrors.Internal("default role assignment failed")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return UserResponse{}, err
+	}
+
+	return userToResponse(created), nil
 }
 
-// validateUser validates user data
-func validateUser(user *User) error {
-	if user == nil {
-		return ErrInvalidInput
+// Updates an existing user
+func (s *Service) UpdateUser(ctx context.Context, id int32, user *UpdateUserRequest) (UserResponse, error) {
+	actorID := middleware.UserIDFromContext(ctx)
+	allowed, err := s.canAccess(ctx, actorID, id, "user", "write")
+	if err != nil {
+		return UserResponse{}, err
 	}
-	if user.Name == "" || user.Email == "" {
-		return ErrInvalidInput
+	if !allowed {
+		return UserResponse{}, apperrors.Forbidden("insufficient permission")
+	}
+
+	currentUser, err := s.repo.GetUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return UserResponse{}, apperrors.NotFound("user not found")
+		}
+		return UserResponse{}, err
+	}
+
+	if user.Email != "" && user.Email != currentUser.Email {
+		return UserResponse{}, apperrors.BadRequest("email cannot be updated")
+	}
+
+	passwordToSave := currentUser.Password
+	if user.NewPassword != "" {
+		if user.OldPassword == "" {
+			return UserResponse{}, apperrors.BadRequest("old password is required to set a new password")
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(currentUser.Password), []byte(user.OldPassword)); err != nil {
+			return UserResponse{}, apperrors.BadRequest("old password is incorrect")
+		}
+		if err := ValidatePassword(user.NewPassword); err != nil {
+			return UserResponse{}, err
+		}
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(user.NewPassword), 12)
+		if err != nil {
+			return UserResponse{}, err
+		}
+		passwordToSave = string(hash)
+	}
+
+	nameToSave := currentUser.Name
+	if user.Name != "" {
+		nameToSave = user.Name
+	}
+
+	arg := repo.UpdateUserParams{
+		ID:       id,
+		Name:     nameToSave,
+		Email:    currentUser.Email,
+		Password: passwordToSave,
+	}
+
+	updated, err := s.repo.UpdateUser(ctx, arg)
+	if err != nil {
+		return UserResponse{}, err
+	}
+
+	return userToResponse(updated), nil
+}
+
+// Deletes a user
+func (s *Service) DeleteUser(ctx context.Context, id int32) (int64, error) {
+	actorID := middleware.UserIDFromContext(ctx)
+	allowed, err := s.canAccess(ctx, actorID, id, "user", "write")
+	if err != nil {
+		return 0, err
+	}
+	if !allowed {
+		return 0, apperrors.Forbidden("insufficient permission")
+	}
+
+	return s.repo.DeleteUser(ctx, id)
+}
+
+func (s *Service) scopeSet(ctx context.Context, actorID int32, resource, action string) (authorization.ScopeSet, error) {
+	scopes, err := s.repo.GetPermissionScopesForUser(ctx, repo.GetPermissionScopesForUserParams{
+		UserID:   actorID,
+		Resource: resource,
+		Action:   action,
+	})
+	if err != nil {
+		return authorization.ScopeSet{}, err
+	}
+
+	return authorization.BuildScopeSet(scopes), nil
+}
+
+func (s *Service) canAccess(ctx context.Context, actorID, ownerID int32, resource, action string) (bool, error) {
+	scopeSet, err := s.scopeSet(ctx, actorID, resource, action)
+	if err != nil {
+		return false, err
+	}
+
+	return scopeSet.Allows(actorID, ownerID), nil
+}
+
+// -------------------------- Helpers --------------------------
+
+// Validates input password
+func ValidatePassword(password string) error {
+	if len(password) < 6 {
+		return apperrors.BadRequest("password must be at least 6 characters")
+	}
+	if len(password) > 60 {
+		return apperrors.BadRequest("password must be at most 60 characters")
+	}
+	hasNumber := false
+	for _, c := range password {
+		if c >= '0' && c <= '9' {
+			hasNumber = true
+			break
+		}
+	}
+	if !hasNumber {
+		return apperrors.BadRequest("password must contain at least one number")
 	}
 	return nil
 }

@@ -8,13 +8,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Permission struct {
+	ID          int64              `json:"id"`
+	Resource    string             `json:"resource"`
+	Action      string             `json:"action"`
+	Scope       string             `json:"scope"`
+	Description pgtype.Text        `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Role struct {
+	ID          int16              `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RolesPermission struct {
+	RoleID       int16              `json:"role_id"`
+	PermissionID int64              `json:"permission_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Task struct {
-	ID          int64            `json:"id"`
-	Title       string           `json:"title"`
-	Description pgtype.Text      `json:"description"`
-	Completed   bool             `json:"completed"`
-	CreatedAt   pgtype.Timestamp `json:"created_at"`
-	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+	ID          int64              `json:"id"`
+	OwnerID     int32              `json:"owner_id"`
+	Title       string             `json:"title"`
+	Description pgtype.Text        `json:"description"`
+	DueDate     pgtype.Timestamptz `json:"due_date"`
+	Completed   bool               `json:"completed"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {
@@ -24,4 +51,22 @@ type User struct {
 	Password  string           `json:"password"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 	UpdatedAt pgtype.Timestamp `json:"updated_at"`
+}
+
+type UserSession struct {
+	ID        int64              `json:"id"`
+	UserID    int32              `json:"user_id"`
+	DeviceID  string             `json:"device_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UsersRole struct {
+	UserID    int32              `json:"user_id"`
+	RoleID    int16              `json:"role_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }

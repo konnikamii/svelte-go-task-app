@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/apperrors"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/handlers"
 	"github.com/sirupsen/logrus"
 )
@@ -23,14 +25,19 @@ func NewHandler(service *Service) *Handler {
 	}
 }
 
-// GetTasks handles GET /tasks
-func (h *Handler) GetTasks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logrus.Error("asdasd")
-	tasks, err := h.service.GetTasks(ctx)
+// GetTasksPaginated handles GET /tasks
+func (h *Handler) GetTasksPaginated(w http.ResponseWriter, r *http.Request) {
+	var body PaginatedParams
+	if err := h.Read(r, &body); err != nil {
+		logrus.WithError(err).Error("failed to parse params")
+		h.AppError(w, apperrors.BadRequest("invalid request body"))
+		return
+	}
+
+	tasks, err := h.service.GetTasksPaginated(r.Context(), body)
 	if err != nil {
 		logrus.WithError(err).Error("failed to get tasks")
-		h.Error(w, http.StatusInternalServerError, "failed to fetch tasks")
+		h.AppError(w, err)
 		return
 	}
 
@@ -39,19 +46,16 @@ func (h *Handler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 // CreateTask handles POST /tasks
 func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var task Task
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		logrus.WithError(err).Warn("failed to decode task")
-		h.Error(w, http.StatusBadRequest, "invalid request body")
+	var body repo.CreateTaskParams
+	if err := h.Read(r, &body); err != nil {
+		logrus.WithError(err).Error("failed to parse params")
+		h.AppError(w, apperrors.BadRequest("invalid request body"))
 		return
 	}
 
-	created, err := h.service.CreateTask(ctx, &task)
+	created, err := h.service.CreateTask(r.Context(), &body)
 	if err != nil {
-		appErr := err.(Error)
-		h.Error(w, appErr.Code, appErr.Message)
+		h.AppError(w, err)
 		return
 	}
 
@@ -60,20 +64,18 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 // GetTaskByID handles GET /tasks/{id}
 func (h *Handler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		logrus.WithField("id", idStr).Warn("invalid task id")
-		h.Error(w, http.StatusBadRequest, "invalid task id")
+		h.AppError(w, apperrors.BadRequest("invalid task id"))
 		return
 	}
 
-	task, err := h.service.GetTaskByID(ctx, id)
+	task, err := h.service.GetTaskByID(r.Context(), int64(id))
 	if err != nil {
-		appErr := err.(Error)
-		h.Error(w, appErr.Code, appErr.Message)
+		logrus.WithError(err).Error("failed to get task by id")
+		h.AppError(w, err)
 		return
 	}
 
@@ -82,27 +84,24 @@ func (h *Handler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
 
 // UpdateTask handles PUT /tasks/{id}
 func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		logrus.WithField("id", idStr).Warn("invalid task id")
-		h.Error(w, http.StatusBadRequest, "invalid task id")
+		h.AppError(w, apperrors.BadRequest("invalid task id"))
 		return
 	}
 
-	var task Task
+	var task repo.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		logrus.WithError(err).Warn("failed to decode task")
-		h.Error(w, http.StatusBadRequest, "invalid request body")
+		h.AppError(w, apperrors.BadRequest("invalid request body"))
 		return
 	}
 
-	updated, err := h.service.UpdateTask(ctx, id, &task)
+	updated, err := h.service.UpdateTask(r.Context(), int64(id), &task)
 	if err != nil {
-		appErr := err.(Error)
-		h.Error(w, appErr.Code, appErr.Message)
+		h.AppError(w, err)
 		return
 	}
 
@@ -117,16 +116,15 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		logrus.WithField("id", idStr).Warn("invalid task id")
-		h.Error(w, http.StatusBadRequest, "invalid task id")
+		h.AppError(w, apperrors.BadRequest("invalid task id"))
 		return
 	}
 
-	err = h.service.DeleteTask(ctx, id)
+	deleted, err := h.service.DeleteTask(ctx, int64(id))
 	if err != nil {
-		appErr := err.(Error)
-		h.Error(w, appErr.Code, appErr.Message)
+		h.AppError(w, err)
 		return
 	}
 
-	h.JSON(w, http.StatusNoContent, nil)
+	h.JSON(w, http.StatusNoContent, deleted)
 }

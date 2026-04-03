@@ -1,44 +1,49 @@
 package users
 
 import (
-	"context"
-	"net/http"
 	"time"
+
+	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 )
 
-// User represents a user in the system
-type User struct {
-	ID        int       `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	Password  string    `json:"-"` // Never expose password in JSON
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+// -------------------- User --------------------
+type UserResponse struct {
+	ID        int32  `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
 }
 
-// Error types for proper error handling
-type Error struct {
-	Code    int
-	Message string
+type UpdateUserRequest struct {
+	Name        string `json:"name"`
+	Email       string `json:"email,omitempty"`
+	OldPassword string `json:"oldPassword,omitempty"`
+	NewPassword string `json:"newPassword,omitempty"`
 }
 
-func (e Error) Error() string {
-	return e.Message
+func userToResponse(u repo.User) UserResponse {
+	return UserResponse{
+		ID:        u.ID,
+		Name:      u.Name,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt.Time.Format(time.RFC3339),
+	}
 }
 
-var (
-	ErrUserNotFound = Error{Code: http.StatusNotFound, Message: "user not found"}
-	ErrInvalidInput = Error{Code: http.StatusBadRequest, Message: "invalid input"}
-	ErrInternal     = Error{Code: http.StatusInternalServerError, Message: "internal server error"}
-	ErrUserExists   = Error{Code: http.StatusBadRequest, Message: "user already exists"}
-)
+// -------------------- Pagination --------------------
+type PaginatedFilters struct {
+	Search string `json:"search,omitempty" bson:"search,omitempty"`
+}
 
-// Repository interface for data access abstraction
-type Repository interface {
-	GetUsers(ctx context.Context) ([]User, error)
-	GetUserByID(ctx context.Context, id int) (*User, error)
-	GetUserByEmail(ctx context.Context, email string) (*User, error)
-	CreateUser(ctx context.Context, user *User) (*User, error)
-	UpdateUser(ctx context.Context, id int, user *User) (*User, error)
-	DeleteUser(ctx context.Context, id int) error
+type PaginatedRequest struct {
+	Page     int32            `json:"page,omitempty" bson:"page,omitempty"`
+	PageSize int32            `json:"pageSize,omitempty" bson:"pageSize,omitempty"`
+	SortBy   string           `json:"sortBy,omitempty" bson:"sortBy,omitempty"`
+	SortType string           `json:"sortType,omitempty" bson:"sortType,omitempty"`
+	Filters  PaginatedFilters `json:"filters,omitempty" bson:"filters,omitempty"`
+}
+
+type PaginatedResponce struct {
+	TotalEntries int64          `json:"totalEntries" bson:"totalEntries"`
+	Entries      []UserResponse `json:"entries" bson:"entries"`
 }

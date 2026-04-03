@@ -1,0 +1,17 @@
+-- +goose Up
+CREATE TABLE IF NOT EXISTS tasks (
+    id BIGSERIAL PRIMARY KEY CHECK (id >= 0),
+    owner_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    due_date TIMESTAMPTZ,
+    completed BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER update_modified_time BEFORE
+UPDATE ON tasks FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+-- +goose Down
+DROP TABLE IF EXISTS tasks;

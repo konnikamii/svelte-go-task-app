@@ -9,7 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/auth"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/handlers"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/tasks"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/users"
@@ -23,8 +25,9 @@ type application struct {
 }
 
 type config struct {
-	addr string
-	db   dbConfig
+	addr        string
+	db          dbConfig
+	frontendURL string
 }
 
 type dbConfig struct {
@@ -33,6 +36,16 @@ type dbConfig struct {
 
 func (app *application) mount() http.Handler {
 	r := chi.NewRouter()
+
+	// CORS — must be first so preflight OPTIONS requests are handled correctly.
+	// AllowCredentials is required for cross-origin session cookies.
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{app.config.frontendURL},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	// Middleware stack
 	r.Use(middleware.RequestID) // rate limiting
@@ -45,23 +58,26 @@ func (app *application) mount() http.Handler {
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	// Common routes
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello world!"))
-	})
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("all good"))
-	})
-	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("pong"))
-	})
-	r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(""))
-	})
-
 	// Tasks routes
-	tasks.Routes(r)
-	users.Routes(r)
+	r.Route("/api", func(r chi.Router) {
+		// Common routes
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello world!"))
+		})
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("all good"))
+		})
+		r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("pong"))
+		})
+		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(""))
+		})
+		// Modules
+		auth.Routes(r, app.db)
+		users.Routes(r, app.db)
+		tasks.Routes(r, app.db)
+	})
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

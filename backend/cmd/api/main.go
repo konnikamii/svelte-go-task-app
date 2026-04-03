@@ -6,7 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
+	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/env"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/middleware"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,15 +19,23 @@ func main() {
 	}
 
 	// Logger
-	// logrus.SetReportCaller(true)
+	logrus.SetReportCaller(true)
 	logrus.SetFormatter(&logrus.TextFormatter{ForceColors: true})
+
+	// Init env
+	envCfg, err := env.InitEnv()
+	if err != nil {
+		logrus.Error("Error initializing env variables!")
+		panic(err)
+	}
 
 	ctx := context.Background()
 	cfg := config{
-		addr: env.GetString("SERVER_HOST", "") + ":" + env.GetString("SERVER_PORT", ""),
+		addr: envCfg.ServerHost + ":" + envCfg.ServerPort,
 		db: dbConfig{
-			dsn: env.GetString("GOOSE_DBSTRING", ""),
+			dsn: envCfg.DBString,
 		},
+		frontendURL: envCfg.FrontendURL,
 	}
 
 	// Database
@@ -35,6 +45,16 @@ func main() {
 		panic(err)
 	}
 	defer conn.Close(ctx)
+
+	queries := repo.New(conn)
+
+	// Session store (cookie token + server-side DB session records)
+	middleware.InitStore(
+		envCfg.SessionSecret,
+		envCfg.CookieSecure,
+		envCfg.SessionDurationMinutes,
+		queries,
+	)
 
 	// Start
 	app := application{

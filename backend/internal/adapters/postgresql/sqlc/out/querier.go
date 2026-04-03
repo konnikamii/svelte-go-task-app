@@ -9,8 +9,25 @@ import (
 )
 
 type Querier interface {
-	GetProductById(ctx context.Context, id int64) (Task, error)
-	ListProducts(ctx context.Context) ([]Task, error)
+	AssignRoleByNameToUser(ctx context.Context, arg AssignRoleByNameToUserParams) (int64, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (UserSession, error)
+	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteStaleSessions(ctx context.Context) (int64, error)
+	DeleteTask(ctx context.Context, id int64) (int64, error)
+	DeleteUser(ctx context.Context, id int32) (int64, error)
+	GetActiveSessionByTokenHash(ctx context.Context, tokenHash string) (UserSession, error)
+	//---------------------- Authorization ------------------------
+	GetPermissionScopesForUser(ctx context.Context, arg GetPermissionScopesForUserParams) ([]string, error)
+	//---------------------- Tasks ------------------------
+	GetTaskByID(ctx context.Context, id int64) (Task, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	//---------------------- Users ------------------------
+	GetUserByID(ctx context.Context, id int32) (User, error)
+	RevokeSessionByTokenHash(ctx context.Context, tokenHash string) (int64, error)
+	RevokeSessionsByUserAndDevice(ctx context.Context, arg RevokeSessionsByUserAndDeviceParams) (int64, error)
+	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)
+	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -2,7 +2,7 @@ package auth
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/middleware"
 )
@@ -11,7 +11,7 @@ import (
 // POST /login  — open; accepts multipart form fields: email, password
 // POST /logout — open
 // GET  /me     — requires valid session (RequireAuth)
-func Routes(r chi.Router, db *pgx.Conn) {
+func Routes(r chi.Router, db *pgxpool.Pool) {
 	handler := NewHandler(NewService(*repo.New(db)))
 
 	r.Post("/login", handler.Login)

@@ -19,12 +19,14 @@ Each feature lives in its own domain folder under `internal/`:
 
 ```
 <domain>.handler.go   — HTTP handlers (thin, delegate to service)
-<domain>.routes.go    — route registration, receives *pgx.Conn
-<domain>.service.go   — business logic, uses repo.Queries + *pgx.Conn
+<domain>.routes.go    — route registration, receives *pgxpool.Pool
+<domain>.service.go   — business logic, uses repo.Queries + *pgxpool.Pool
 <domain>.types.go     — request/response DTOs for this domain (optional)
 ```
 
-Current domains: `auth`, `tasks`, `users`.
+Current domains: `auth`, `seed`, `tasks`, `users`.
+
+Current domains: `auth`, `contact`, `seed`, `tasks`, `users`.
 
 ### Dependency direction
 
@@ -45,12 +47,14 @@ Handlers must not access the database directly.
 
 ### Route registration pattern
 
-Every `Routes(r chi.Router, db *pgx.Conn)` function must:
+Every `Routes(r chi.Router, db *pgxpool.Pool)` function must:
 
 1. Construct the repo via `repo.New(db)`
-2. Construct the service with `repo.Queries` (and `*pgx.Conn` when raw queries are needed)
+2. Construct the service with `repo.Queries` (and `*pgxpool.Pool` when raw queries or transactions are needed)
 3. Construct the handler with the service
 4. Register routes under the domain prefix, split into open and protected groups
+
+Use a connection pool for application-wide database access. Do not share a single `*pgx.Conn` across HTTP requests because concurrent requests will hit `conn busy` failures.
 
 ### Protected vs open routes
 
@@ -85,6 +89,10 @@ r.Route("/users", func(r chi.Router) {
   - `POST /login` — open; derives device_id, revokes old sessions on this device for this user, creates new session, sets `sid` cookie
   - `POST /logout` — open; revokes DB session and clears `sid` cookie
   - `GET /me` — protected; returns current user info
+- Contact endpoint:
+  - `POST /contact/` — open; stores a contact request with required `email`, `title`, and `message`; after save, the backend attempts a non-blocking SMTP notification (for local compose: MailHog)
+- Seed endpoint:
+  - `POST /seed` — open only in the sense that it does not require auth, but it must return `409` when any user already exists; it seeds roles, permissions, role mappings, demo users, user-role mappings, and demo tasks in one transaction for an empty database only
 
 Cookie settings (set in `auth.Handler`):
 
@@ -188,6 +196,10 @@ Params struct carries: `Page`, `PageSize`, `SortBy`, `SortType`, `Filters`.
 | `COOKIE_SECURE`            | `false`                                     | Set `true` in production (HTTPS only) |
 | `SESSION_SECRET`           | —                                           | Cookie session signing/encryption key |
 | `SESSION_DURATION_MINUTES` | `1440`                                      | Session cookie max age in minutes     |
+| `SMTP_HOST`                | `mailhog`                                   | SMTP host for contact notifications   |
+| `SMTP_PORT`                | `1025`                                      | SMTP port for contact notifications   |
+| `SMTP_FROM`                | `no-reply@taskify.local`                    | Sender for contact notifications      |
+| `SMTP_TO`                  | `contact@taskify.local`                     | Recipient for contact notifications   |
 
 ---
 
@@ -206,12 +218,24 @@ Params struct carries: `Page`, `PageSize`, `SortBy`, `SortType`, `Filters`.
 # Backend (with live reload)
 cd backend && air
 
+# Frontend
+cd frontend && pnpm dev
+
+# Full stack with Docker Compose
+docker compose up --build
+
 # Regenerate sqlc types
 cd backend && sqlc generate
 
 # New migration
 cd backend && goose create <name> -s sql
 ```
+
+Docker notes:
+
+- `docker-compose.yaml` builds `frontend` and `backend` from their local Dockerfiles and runs PostgreSQL as `postgres`
+- The frontend build arg `PUBLIC_BACKEND_URL` should point to the browser-visible backend URL (for local compose: `http://localhost:8000`)
+- PostgreSQL initializes schema from `backend/internal/adapters/postgresql/migrations/` on first startup of a fresh `postgres-data` volume
 
 You are able to use the Svelte MCP server, where you have access to comprehensive Svelte 5 and SvelteKit documentation. Here's how to use the available tools effectively:
 

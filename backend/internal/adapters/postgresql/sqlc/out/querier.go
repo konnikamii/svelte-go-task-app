@@ -10,6 +10,8 @@ import (
 
 type Querier interface {
 	AssignRoleByNameToUser(ctx context.Context, arg AssignRoleByNameToUserParams) (int64, error)
+	//---------------------- Contact ------------------------
+	CreateContactRequest(ctx context.Context, arg CreateContactRequestParams) (ContactRequest, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (UserSession, error)
 	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -24,6 +26,7 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	//---------------------- Users ------------------------
 	GetUserByID(ctx context.Context, id int32) (User, error)
+	GetUserByUsername(ctx context.Context, username string) (User, error)
 	RevokeSessionByTokenHash(ctx context.Context, tokenHash string) (int64, error)
 	RevokeSessionsByUserAndDevice(ctx context.Context, arg RevokeSessionsByUserAndDeviceParams) (int64, error)
 	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)

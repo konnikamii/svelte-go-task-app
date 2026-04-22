@@ -11,9 +11,9 @@ import (
 
 // UserInfo is the client-facing user shape returned by login and /me.
 type UserInfo struct {
-	ID    int32  `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID       int32  `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
 }
 
 type Handler struct {
@@ -48,30 +48,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Derive the device ID from request headers.
-	deviceID := middleware.DeviceIDFromRequest(r)
-
-	// Revoke any existing active sessions for this user on this device.
-	// This ensures one active session per user per device (supports multi-device logins).
-	if err := middleware.RevokeActiveSessionsForUserOnDevice(r.Context(), user.ID, deviceID); err != nil {
-		logrus.WithError(err).Warn("failed to revoke previous device sessions")
-	}
-
-	if err := middleware.CleanupStaleSessions(r.Context()); err != nil {
-		logrus.WithError(err).Warn("failed to cleanup stale sessions")
-	}
-
-	token, err := middleware.CreateSession(r.Context(), user.ID, deviceID)
-	if err != nil {
+	if err := middleware.StartUserSession(r.Context(), w, r, user.ID); err != nil {
 		h.AppError(w, apperrors.Internal("could not create login session"))
 		return
 	}
-	middleware.SetSessionCookie(w, token)
 
 	h.JSON(w, http.StatusOK, UserInfo{
-		ID:    user.ID,
-		Name:  user.Name,
-		Email: user.Email,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
 	})
 }
 
@@ -100,8 +85,8 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.JSON(w, http.StatusOK, UserInfo{
-		ID:    user.ID,
-		Name:  user.Name,
-		Email: user.Email,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
 	})
 }

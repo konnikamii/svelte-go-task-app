@@ -8,6 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ContactRequest struct {
+	ID        int64              `json:"id"`
+	Email     string             `json:"email"`
+	Title     string             `json:"title"`
+	Message   string             `json:"message"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Permission struct {
 	ID          int64              `json:"id"`
 	Resource    string             `json:"resource"`
@@ -46,7 +55,7 @@ type Task struct {
 
 type User struct {
 	ID        int32            `json:"id"`
-	Name      string           `json:"name"`
+	Username  string           `json:"username"`
 	Email     string           `json:"email"`
 	Password  string           `json:"password"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`

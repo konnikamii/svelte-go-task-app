@@ -10,23 +10,23 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (name, email, PASSWORD)
+INSERT INTO users (username, email, PASSWORD)
 VALUES ($1, $2, $3)
-RETURNING id, name, email, password, created_at, updated_at
+RETURNING id, username, email, password, created_at, updated_at
 `
 
 type CreateUserParams struct {
-	Name     string `json:"name"`
+	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Name, arg.Email, arg.Password)
+	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.Email, arg.Password)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
+		&i.Username,
 		&i.Email,
 		&i.Password,
 		&i.CreatedAt,
@@ -49,7 +49,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id int32) (int64, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password, created_at, updated_at
+SELECT id, username, email, password, created_at, updated_at
 FROM users
 WHERE email = $1
 `
@@ -59,7 +59,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
+		&i.Username,
 		&i.Email,
 		&i.Password,
 		&i.CreatedAt,
@@ -69,7 +69,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password, created_at, updated_at
+SELECT id, username, email, password, created_at, updated_at
 FROM users
 WHERE id = $1
 `
@@ -80,7 +80,27 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByUsername = `-- name: GetUserByUsername :one
+SELECT id, username, email, password, created_at, updated_at
+FROM users
+WHERE username = $1
+`
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
 		&i.Email,
 		&i.Password,
 		&i.CreatedAt,
@@ -91,16 +111,16 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET name = $2,
+SET username = $2,
   email = $3,
   PASSWORD = $4
 WHERE id = $1
-RETURNING id, name, email, password, created_at, updated_at
+RETURNING id, username, email, password, created_at, updated_at
 `
 
 type UpdateUserParams struct {
 	ID       int32  `json:"id"`
-	Name     string `json:"name"`
+	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -108,14 +128,14 @@ type UpdateUserParams struct {
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.ID,
-		arg.Name,
+		arg.Username,
 		arg.Email,
 		arg.Password,
 	)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
+		&i.Username,
 		&i.Email,
 		&i.Password,
 		&i.CreatedAt,

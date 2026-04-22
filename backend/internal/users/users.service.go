@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/apperrors"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/authorization"
@@ -17,11 +18,11 @@ import (
 
 type Service struct {
 	repo repo.Queries
-	db   *pgx.Conn
+	db   *pgxpool.Pool
 }
 
 // NewService creates a new user service
-func NewService(repo repo.Queries, db *pgx.Conn) *Service {
+func NewService(repo repo.Queries, db *pgxpool.Pool) *Service {
 	return &Service{repo: repo, db: db}
 }
 
@@ -52,7 +53,7 @@ func (s *Service) GetUsersPaginated(ctx context.Context, arg PaginatedRequest) (
 	if arg.Filters.Search != "" {
 		args = append(args, "%"+arg.Filters.Search+"%")
 		where = append(where,
-			fmt.Sprintf("(CAST(id AS TEXT) ILIKE $%d OR name ILIKE $%d OR email ILIKE $%d)", len(args), len(args), len(args)),
+			fmt.Sprintf("(CAST(id AS TEXT) ILIKE $%d OR username ILIKE $%d OR email ILIKE $%d)", len(args), len(args), len(args)),
 		)
 	}
 
@@ -68,7 +69,7 @@ func (s *Service) GetUsersPaginated(ctx context.Context, arg PaginatedRequest) (
 
 	sortBy := "created_at"
 	switch arg.SortBy {
-	case "id", "name", "email", "created_at":
+	case "id", "username", "email", "created_at":
 		sortBy = arg.SortBy
 	}
 
@@ -99,7 +100,7 @@ func (s *Service) GetUsersPaginated(ctx context.Context, arg PaginatedRequest) (
 		var user repo.User
 		if err := rows.Scan(
 			&user.ID,
-			&user.Name,
+			&user.Username,
 			&user.Email,
 			&user.Password,
 			&user.CreatedAt,
@@ -169,6 +170,12 @@ func (s *Service) CreateUser(ctx context.Context, user *repo.CreateUserParams) (
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return UserResponse{}, err
 	}
+	_, err = s.repo.GetUserByUsername(ctx, user.Username)
+	if err == nil {
+		return UserResponse{}, apperrors.Conflict("username is already taken")
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return UserResponse{}, err
+	}
 	if err := ValidatePassword(user.Password); err != nil {
 		return UserResponse{}, err
 	}
@@ -182,7 +189,7 @@ func (s *Service) CreateUser(ctx context.Context, user *repo.CreateUserParams) (
 		return UserResponse{}, err
 	}
 	qtx := s.repo.WithTx(tx)
-	created, err := qtx.CreateUser(ctx, repo.CreateUserParams{Name: user.Name, Email: user.Email, Password: string(hash)})
+	created, err := qtx.CreateUser(ctx, repo.CreateUserParams{Username: user.Username, Email: user.Email, Password: string(hash)})
 	if err != nil {
 		return UserResponse{}, err
 	}
@@ -247,14 +254,14 @@ func (s *Service) UpdateUser(ctx context.Context, id int32, user *UpdateUserRequ
 		passwordToSave = string(hash)
 	}
 
-	nameToSave := currentUser.Name
-	if user.Name != "" {
-		nameToSave = user.Name
+	nameToSave := currentUser.Username
+	if user.Username != "" {
+		nameToSave = user.Username
 	}
 
 	arg := repo.UpdateUserParams{
 		ID:       id,
-		Name:     nameToSave,
+		Username: nameToSave,
 		Email:    currentUser.Email,
 		Password: passwordToSave,
 	}

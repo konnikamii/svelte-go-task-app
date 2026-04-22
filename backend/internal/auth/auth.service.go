@@ -27,10 +27,17 @@ type LoginParams struct {
 func (s *Service) Login(ctx context.Context, params LoginParams) (repo.User, error) {
 	user, err := s.repo.GetUserByEmail(ctx, params.Email)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return repo.User{}, apperrors.Unauthorized("invalid credentials")
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return repo.User{}, err
 		}
-		return repo.User{}, err
+
+		user, err = s.repo.GetUserByUsername(ctx, params.Email)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return repo.User{}, apperrors.Unauthorized("invalid credentials")
+			}
+			return repo.User{}, err
+		}
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {

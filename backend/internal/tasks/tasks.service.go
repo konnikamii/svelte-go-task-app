@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/apperrors"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/authorization"
@@ -14,32 +17,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Filters struct {
-	Search    string `json:"search,omitempty" bson:"search,omitempty"`
-	Completed *bool  `json:"completed,omitempty" bson:"completed,omitempty"`
-}
-
-type PaginatedParams struct {
-	Page     int32   `json:"page,omitempty" bson:"page,omitempty"`
-	PageSize int32   `json:"pageSize,omitempty" bson:"pageSize,omitempty"`
-	SortBy   string  `json:"sortBy,omitempty" bson:"sortBy,omitempty"`
-	SortType string  `json:"sortType,omitempty" bson:"sortType,omitempty"`
-	Filters  Filters `json:"filters,omitempty" bson:"filters,omitempty"`
-}
-
-type PaginatedReturn struct {
-	TotalEntries int64       `json:"totalEntries" bson:"totalEntries"`
-	Entries      []repo.Task `json:"entries" bson:"entries"`
-}
-
 type Service struct {
 	// repo Repository
 	repo repo.Queries
-	db   *pgx.Conn
+	db   *pgxpool.Pool
 }
 
 // NewService creates a new task service
-func NewService(repo repo.Queries, db *pgx.Conn) *Service {
+func NewService(repo repo.Queries, db *pgxpool.Pool) *Service {
 	return &Service{repo: repo, db: db}
 }
 
@@ -96,8 +81,10 @@ func (s *Service) GetTasksPaginated(ctx context.Context, arg PaginatedParams) (P
 	// Sorting whitelist
 	sortBy := "created_at"
 	switch arg.SortBy {
-	case "id", "title", "created_at":
+	case "id", "title":
 		sortBy = arg.SortBy
+	case "createdAt", "created_at":
+		sortBy = "created_at"
 	}
 
 	sortDir := "ASC"
@@ -122,7 +109,7 @@ func (s *Service) GetTasksPaginated(ctx context.Context, arg PaginatedParams) (P
 	}
 	defer rows.Close()
 
-	tasks := make([]repo.Task, 0)
+	tasks := make([]TaskResponse, 0)
 
 	for rows.Next() {
 		var task repo.Task
@@ -139,7 +126,7 @@ func (s *Service) GetTasksPaginated(ctx context.Context, arg PaginatedParams) (P
 			logrus.WithError(err).Error("failed to scan task row")
 			return PaginatedReturn{}, err
 		}
-		tasks = append(tasks, task)
+		tasks = append(tasks, taskToResponse(task))
 	}
 
 	if err := rows.Err(); err != nil {
@@ -167,94 +154,113 @@ func (s *Service) GetTasksPaginated(ctx context.Context, arg PaginatedParams) (P
 }
 
 // GetTaskByID retrieves a single task by ID
-func (s *Service) GetTaskByID(ctx context.Context, id int64) (repo.Task, error) {
+func (s *Service) GetTaskByID(ctx context.Context, id int64) (TaskResponse, error) {
 	actorID := middleware.UserIDFromContext(ctx)
 	task, err := s.repo.GetTaskByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return repo.Task{}, apperrors.NotFound("task not found")
+			return TaskResponse{}, apperrors.NotFound("task not found")
 		}
-		return repo.Task{}, err
+		return TaskResponse{}, err
 	}
 
 	allowed, err := s.canAccessTask(ctx, actorID, task.OwnerID, "read")
 	if err != nil {
-		return repo.Task{}, err
+		return TaskResponse{}, err
 	}
 	if !allowed {
-		return repo.Task{}, apperrors.Forbidden("insufficient permission")
+		return TaskResponse{}, apperrors.Forbidden("insufficient permission")
 	}
 
-	return task, nil
+	return taskToResponse(task), nil
 }
 
 // CreateTask creates a new task
-func (s *Service) CreateTask(ctx context.Context, task *repo.CreateTaskParams) (*repo.Task, error) {
+func (s *Service) CreateTask(ctx context.Context, task *CreateTaskRequest) (TaskResponse, error) {
 	actorID := middleware.UserIDFromContext(ctx)
 	allowed, err := s.canAccessTask(ctx, actorID, actorID, "write")
 	if err != nil {
-		return nil, err
+		return TaskResponse{}, err
 	}
 	if !allowed {
-		return nil, apperrors.Forbidden("insufficient permission")
+		return TaskResponse{}, apperrors.Forbidden("insufficient permission")
 	}
 
-	task.OwnerID = actorID
+	dueDate, err := parseDueDate(task.DueDate)
+	if err != nil {
+		return TaskResponse{}, err
+	}
+
+	completed := false
+	if task.Completed != nil {
+		completed = *task.Completed
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return TaskResponse{}, err
 	}
 	defer tx.Rollback(ctx)
 	qtx := s.repo.WithTx(tx)
-	created, err := qtx.CreateTask(ctx, *task)
+	created, err := qtx.CreateTask(ctx, repo.CreateTaskParams{
+		OwnerID:     actorID,
+		Title:       task.Title,
+		Description: textValue(task.Description),
+		DueDate:     dueDate,
+		Completed:   completed,
+	})
 	if err != nil {
-		return nil, err
+		return TaskResponse{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+		return TaskResponse{}, err
 	}
 
-	return &created, nil
+	return taskToResponse(created), nil
 }
 
 // UpdateTask updates an existing task
-func (s *Service) UpdateTask(ctx context.Context, id int64, task *repo.Task) (*repo.Task, error) {
+func (s *Service) UpdateTask(ctx context.Context, id int64, task *UpdateTaskRequest) (TaskResponse, error) {
 	actorID := middleware.UserIDFromContext(ctx)
 	current, err := s.repo.GetTaskByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, apperrors.NotFound("task not found")
+			return TaskResponse{}, apperrors.NotFound("task not found")
 		}
-		return nil, err
+		return TaskResponse{}, err
 	}
 
 	allowed, err := s.canAccessTask(ctx, actorID, current.OwnerID, "write")
 	if err != nil {
-		return nil, err
+		return TaskResponse{}, err
 	}
 	if !allowed {
-		return nil, apperrors.Forbidden("insufficient permission")
+		return TaskResponse{}, apperrors.Forbidden("insufficient permission")
+	}
+
+	dueDate, err := parseDueDate(task.DueDate)
+	if err != nil {
+		return TaskResponse{}, err
 	}
 
 	arg := repo.UpdateTaskParams{
 		ID:          id,
 		Title:       task.Title,
-		Description: task.Description,
-		DueDate:     task.DueDate,
+		Description: textValue(task.Description),
+		DueDate:     dueDate,
 		Completed:   task.Completed,
 	}
 
 	updated, err := s.repo.UpdateTask(ctx, arg)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, apperrors.NotFound("task not found")
+			return TaskResponse{}, apperrors.NotFound("task not found")
 		}
-		return nil, err
+		return TaskResponse{}, err
 	}
 
-	return &updated, nil
+	return taskToResponse(updated), nil
 }
 
 // DeleteTask deletes a task
@@ -299,4 +305,25 @@ func (s *Service) canAccessTask(ctx context.Context, actorID, ownerID int32, act
 	}
 
 	return scopeSet.Allows(actorID, ownerID), nil
+}
+
+func textValue(value *string) pgtype.Text {
+	if value == nil {
+		return pgtype.Text{}
+	}
+
+	return pgtype.Text{String: *value, Valid: true}
+}
+
+func parseDueDate(value *string) (pgtype.Timestamptz, error) {
+	if value == nil || *value == "" {
+		return pgtype.Timestamptz{}, nil
+	}
+
+	parsed, err := time.Parse(time.RFC3339, *value)
+	if err != nil {
+		return pgtype.Timestamptz{}, apperrors.BadRequest("invalid dueDate")
+	}
+
+	return pgtype.Timestamptz{Time: parsed, Valid: true}, nil
 }

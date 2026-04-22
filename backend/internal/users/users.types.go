@@ -9,13 +9,13 @@ import (
 // -------------------- User --------------------
 type UserResponse struct {
 	ID        int32  `json:"id"`
-	Name      string `json:"name"`
+	Username  string `json:"username"`
 	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
 }
 
 type UpdateUserRequest struct {
-	Name        string `json:"name"`
+	Username    string `json:"username"`
 	Email       string `json:"email,omitempty"`
 	OldPassword string `json:"oldPassword,omitempty"`
 	NewPassword string `json:"newPassword,omitempty"`
@@ -24,7 +24,7 @@ type UpdateUserRequest struct {
 func userToResponse(u repo.User) UserResponse {
 	return UserResponse{
 		ID:        u.ID,
-		Name:      u.Name,
+		Username:  u.Username,
 		Email:     u.Email,
 		CreatedAt: u.CreatedAt.Time.Format(time.RFC3339),
 	}

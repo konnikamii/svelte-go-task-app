@@ -1,12 +1,10 @@
 package tasks
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/apperrors"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/handlers"
 	"github.com/sirupsen/logrus"
@@ -46,7 +44,7 @@ func (h *Handler) GetTasksPaginated(w http.ResponseWriter, r *http.Request) {
 
 // CreateTask handles POST /tasks
 func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
-	var body repo.CreateTaskParams
+	var body CreateTaskRequest
 	if err := h.Read(r, &body); err != nil {
 		logrus.WithError(err).Error("failed to parse params")
 		h.AppError(w, apperrors.BadRequest("invalid request body"))
@@ -92,9 +90,9 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var task repo.Task
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		logrus.WithError(err).Warn("failed to decode task")
+	var task UpdateTaskRequest
+	if err := h.Read(r, &task); err != nil {
+		logrus.WithError(err).Warn("failed to parse task")
 		h.AppError(w, apperrors.BadRequest("invalid request body"))
 		return
 	}

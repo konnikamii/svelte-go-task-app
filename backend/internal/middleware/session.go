@@ -169,6 +169,26 @@ func CleanupStaleSessions(ctx context.Context) error {
 	return err
 }
 
+func StartUserSession(ctx context.Context, w http.ResponseWriter, r *http.Request, userID int32) error {
+	deviceID := DeviceIDFromRequest(r)
+
+	if err := RevokeActiveSessionsForUserOnDevice(ctx, userID, deviceID); err != nil {
+		return err
+	}
+
+	if err := CleanupStaleSessions(ctx); err != nil {
+		return err
+	}
+
+	token, err := CreateSession(ctx, userID, deviceID)
+	if err != nil {
+		return err
+	}
+
+	SetSessionCookie(w, token)
+	return nil
+}
+
 func newSessionToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

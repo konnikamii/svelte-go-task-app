@@ -10,9 +10,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/auth"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/contact"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/handlers"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/seed"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/tasks"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/users"
 	"github.com/sirupsen/logrus"
@@ -21,13 +23,14 @@ import (
 type application struct {
 	config config
 	// logger
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
 type config struct {
 	addr        string
 	db          dbConfig
 	frontendURL string
+	mail        contact.MailConfig
 }
 
 type dbConfig struct {
@@ -75,6 +78,8 @@ func (app *application) mount() http.Handler {
 		})
 		// Modules
 		auth.Routes(r, app.db)
+		contact.Routes(r, app.db, app.config.mail)
+		seed.Routes(r, app.db)
 		users.Routes(r, app.db)
 		tasks.Routes(r, app.db)
 	})

@@ -9,6 +9,7 @@ import (
 	repo "github.com/konnikamii/svelte-go-task-app/backend/internal/adapters/postgresql/sqlc/out"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/apperrors"
 	"github.com/konnikamii/svelte-go-task-app/backend/internal/handlers"
+	"github.com/konnikamii/svelte-go-task-app/backend/internal/middleware"
 	"github.com/sirupsen/logrus"
 )
 
@@ -53,7 +54,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := repo.CreateUserParams{
-		Name:     r.FormValue("name"),
+		Username: r.FormValue("username"),
 		Email:    r.FormValue("email"),
 		Password: r.FormValue("password"),
 	}
@@ -62,6 +63,12 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logrus.WithError(err).Error("failed to create user")
 		h.AppError(w, err)
+		return
+	}
+
+	if err := middleware.StartUserSession(r.Context(), w, r, created.ID); err != nil {
+		logrus.WithError(err).Error("failed to create registration session")
+		h.AppError(w, apperrors.Internal("could not create registration session"))
 		return
 	}
 

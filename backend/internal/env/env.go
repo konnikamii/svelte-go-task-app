@@ -14,6 +14,10 @@ type Config struct {
 	SessionSecret          string
 	SessionDurationMinutes int
 	CookieSecure           bool
+	SMTPHost               string
+	SMTPPort               int
+	SMTPFrom               string
+	SMTPTo                 string
 }
 
 func GetString(key, fallback string) string {
@@ -43,6 +47,13 @@ func InitEnv() (*Config, error) {
 		}
 	}
 
+	smtpPort := 1025
+	if val := os.Getenv("SMTP_PORT"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil {
+			smtpPort = parsed
+		}
+	}
+
 	return &Config{
 		ServerHost:             GetString("SERVER_HOST", "localhost"),
 		ServerPort:             GetString("SERVER_PORT", "8000"),
@@ -51,5 +62,9 @@ func InitEnv() (*Config, error) {
 		SessionSecret:          os.Getenv("SESSION_SECRET"),
 		SessionDurationMinutes: sessionDurationMinutes,
 		CookieSecure:           GetString("COOKIE_SECURE", "false") == "true",
+		SMTPHost:               GetString("SMTP_HOST", "mailhog"),
+		SMTPPort:               smtpPort,
+		SMTPFrom:               GetString("SMTP_FROM", "no-reply@taskify.local"),
+		SMTPTo:                 GetString("SMTP_TO", "contact@taskify.local"),
 	}, nil
 }

@@ -316,14 +316,25 @@ func textValue(value *string) pgtype.Text {
 }
 
 func parseDueDate(value *string) (pgtype.Timestamptz, error) {
-	if value == nil || *value == "" {
+	if value == nil {
 		return pgtype.Timestamptz{}, nil
 	}
 
-	parsed, err := time.Parse(time.RFC3339, *value)
-	if err != nil {
-		return pgtype.Timestamptz{}, apperrors.BadRequest("invalid dueDate")
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return pgtype.Timestamptz{}, nil
 	}
 
-	return pgtype.Timestamptz{Time: parsed, Valid: true}, nil
+	parsed, err := time.Parse(time.RFC3339, trimmed)
+	if err == nil {
+		return pgtype.Timestamptz{Time: parsed, Valid: true}, nil
+	}
+
+	// Accept date-only payloads (YYYY-MM-DD) from the frontend.
+	parsed, err = time.Parse("2006-01-02", trimmed)
+	if err == nil {
+		return pgtype.Timestamptz{Time: parsed, Valid: true}, nil
+	}
+
+	return pgtype.Timestamptz{}, apperrors.BadRequest("invalid dueDate")
 }

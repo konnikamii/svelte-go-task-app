@@ -42,3 +42,22 @@ You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target
 > environment.
+
+## Analytics and Cookie Consent
+
+This app supports optional analytics providers that are loaded only after user consent.
+
+Set these env vars in your local `.env` (or deployment env):
+
+```env
+PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+PUBLIC_SIMPLE_ANALYTICS_DOMAIN=example.com
+PUBLIC_SIMPLE_ANALYTICS_SCRIPT_URL=https://scripts.simpleanalyticscdn.com/latest.js
+```
+
+- `PUBLIC_GA_MEASUREMENT_ID`: Enables Google Analytics 4 tracking.
+- `PUBLIC_SIMPLE_ANALYTICS_DOMAIN`: Enables Simple Analytics when set.
+- `PUBLIC_SIMPLE_ANALYTICS_SCRIPT_URL`: Optional override for Simple Analytics script URL.
+
+When users first load the app, a cookie consent banner appears. Analytics scripts and page tracking run only if the user
+accepts.

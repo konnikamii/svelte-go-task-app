@@ -1,0 +1,480 @@
+{
+  "info": {
+    "_postman_id": "85831b50-3d12-4797-866f-2a4ef0607cdd",
+    "name": "go-svelte-task-app",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "32076940"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"JWT\", pm.response.json().access);\r",
+                  "pm.environment.set(\"refresh_token\", pm.response.json().refresh);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "email",
+                  "value": "testacc",
+                  "description": "worsk with username too",
+                  "type": "text",
+                  "uuid": "3a9a5c25-0e01-4182-979a-eb75705a01f1",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "test@test.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "Qwerty123",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{URL}}/login",
+              "host": ["{{URL}}"],
+              "path": ["login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"JWT\", pm.response.json().access);\r",
+                  "pm.environment.set(\"refresh_token\", pm.response.json().refresh);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{URL}}/logout",
+              "host": ["{{URL}}"],
+              "path": ["logout"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{URL}}/me",
+              "host": ["{{URL}}"],
+              "path": ["me"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{URL}}/users/1",
+              "host": ["{{URL}}"],
+              "path": ["users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Paginated Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"page\": 1,\r\n    \"pageSize\": 10,\r\n    \"sortBy\": \"title\",\r\n    \"sortType\": \"desc\",\r\n    \"filters\": {\r\n        \"search\": \"\"\r\n    }\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/users/list",
+              "host": ["{{URL}}"],
+              "path": ["users", "list"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register",
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {}
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "username",
+                  "value": "testacc",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "test@test.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "Qwerty123",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{URL}}/users",
+              "host": ["{{URL}}"],
+              "path": ["users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {}
+          },
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": " {\r\n    \"username\": \"testacc\",\r\n    \"email\": \"test@test.com\",\r\n    \"oldPassword\": \"Qwerty123\",\r\n    \"newPassword\": \"Qwerty1234\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/users/4",
+              "host": ["{{URL}}"],
+              "path": ["users", "4"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Get Task By Id",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/tasks/1",
+              "host": ["{{URL}}"],
+              "path": ["tasks", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Paginated Tasks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"page\": 1,\r\n    \"pageSize\": 10,\r\n    \"sortBy\": \"id\",\r\n    \"sortType\": \"asc\",\r\n    \"filters\": {\r\n        \"search\": \"\",\r\n        \"completed\": null\r\n    }\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/tasks/list",
+              "host": ["{{URL}}"],
+              "path": ["tasks", "list"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"title\": \"task title\",\r\n    \"description\": \"task description\",\r\n    \"completed\": false,\r\n    \"dueDate\": \"2026-12-12\" // date | null\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/tasks",
+              "host": ["{{URL}}"],
+              "path": ["tasks"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \r\n    \"title\": \"task title\",\r\n    \"description\": \"task description\",\r\n    \"completed\": true,\r\n    \"dueDate\": \"2025-12-22\" \r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/tasks/19",
+              "host": ["{{URL}}"],
+              "path": ["tasks", "19"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{JWT}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/tasks/1",
+              "host": ["{{URL}}"],
+              "path": ["tasks", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contact",
+      "item": [
+        {
+          "name": "Create Contact",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": " {\r\n    \"email\" : \"test@test.com\",\r\n    \"title\" : \"Subject 1\",\r\n    \"message\" : \"This is my message\" \r\n }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{URL}}/contact",
+              "host": ["{{URL}}"],
+              "path": ["contact"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Hello world",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{URL}}",
+          "host": ["{{URL}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Seed DB",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{URL}}/seed",
+          "host": ["{{URL}}"],
+          "path": ["seed"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{JWT}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [""]
+      }
+    }
+  ]
+}

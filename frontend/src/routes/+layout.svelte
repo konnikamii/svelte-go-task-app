@@ -1,16 +1,29 @@
 <script lang="ts">
+  import { afterNavigate } from '$app/navigation'
   import { page } from '$app/state'
+  import { initAnalyticsIfConsented, resetTrackedPath, trackPageView } from '$lib/analytics/tracking'
   import { queryClient } from '$lib/api/client'
   import favicon from '$lib/assets/logo.svg'
   import AppHeader from '$lib/components/custom/AppHeader.svelte'
+  import CookieConsent from '$lib/components/custom/CookieConsent.svelte'
   import Header from '$lib/components/custom/Header.svelte'
   import Navbar from '$lib/components/custom/Navbar.svelte'
   import { QueryClientProvider } from '@tanstack/svelte-query'
   import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools'
+  import { onMount } from 'svelte'
   import { Toaster } from 'svelte-sonner'
   import './layout.css'
 
   let { children } = $props()
+
+  onMount(() => {
+    resetTrackedPath()
+    initAnalyticsIfConsented()
+  })
+
+  afterNavigate(() => {
+    trackPageView(page.url)
+  })
 </script>
 
 <svelte:head>
@@ -31,6 +44,7 @@
       {@render main()}
 
       <Toaster richColors />
+      <CookieConsent />
     {:else}
       <div class="flex">
         <Navbar />
@@ -42,6 +56,7 @@
           </div>
         </div>
       </div>
+      <CookieConsent />
     {/if}
   </div>
   <SvelteQueryDevtools />
